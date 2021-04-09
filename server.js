@@ -10,36 +10,24 @@ server.on('error', (error) => {
 function handleConnection (socket) {
   console.log('-----Connected-----')
   let buffer = Buffer.from('')
-  let marker, headLength, contentLength
+  let contentLength
   const request = {}
 
   socket.on('data', (chunk) => {
-    buffer = Buffer.concat([buffer, chunk])
     console.log('adding to buffer', chunk.length, buffer.length)
-
-    const message = buffer.toString()
-
-    if (!request.headers) {
-      marker = message.indexOf('\r\n\r\n')
-      if (marker === -1) {
-        throw Error('Incomplete Headers?')
-      } else {
-        const head = message.slice(0, marker + 4)
-        request.headers = {}
-        headParser(head.slice(0, -4), request)
-        console.log(request)
-
-        headLength = Buffer.from(head).length
-        contentLength = Number(request.headers['content-length'])
-      }
+    // Assuming header is in first chunk
+    if (buffer.length === 0) {
+      const marker = chunk.indexOf('\r\n\r\n')
+      headParser(chunk.slice(0, marker).toString(), request)
+      contentLength = Number(request.headers['content-length'])
+      buffer = Buffer.concat([buffer, chunk.slice(marker + 4)])
     } else {
-      console.log('lengths: ', buffer.length - headLength, contentLength)
+      buffer = Buffer.concat([buffer, chunk])
+      console.log('lengths: ', buffer.length, contentLength)
+      if (buffer.length === contentLength) {
+        console.log('sending to parse', buffer.length)
 
-      if (buffer.length - headLength === contentLength) {
-        const remaining = message.slice(marker + 4)
-        console.log('sending to parse', remaining.length, Buffer.from(remaining).length)
-
-        bodyParser(remaining, request)
+        bodyParser(buffer, request)
         console.log(request)
 
         const response = generateResponse(request)
@@ -63,9 +51,11 @@ function handleConnection (socket) {
 
 function headParser (head, request) {
   console.log('headParser: head.length', head.length)
-  const [startLine, ...headerLines] = head.split('\r\n')
+  request.headers = {}
 
+  const [startLine, ...headerLines] = head.split('\r\n')
   Object.entries(parseStartLine(startLine)).forEach(([key, value]) => setHeader(request, key, value))
+
   headerLines.forEach(line => {
     const [key, value] = line.split(':')
     setHeader(request, key.toLowerCase(), value.trim())
