@@ -3,10 +3,10 @@ module.exports = function generateResponse (request, statusCode = 200) {
   const responseData = methodHandler(request)
   const response = [
     generateStatusLine(statusCode),
-    generateResponseHeaders(0),
+    generateResponseHeaders(request.body ? request.body.length : 0),
     generateResponseBody(responseData)
   ]
-  return Buffer.from(response.join('\r\n'))
+  return response.join('\r\n')
 }
 
 function generateResponseBody (data = '') {
@@ -33,4 +33,5 @@ function generateStatusLine (status) {
 
 function methodHandler ({ method, url, headers, body }) {
   // routeHandler -> staticFileHandler ?
+  return body
 }

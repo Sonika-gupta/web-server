@@ -10,72 +10,70 @@ server.on('error', (error) => {
 function handleConnection (socket) {
   console.log('-----Connected-----')
   let buffer = Buffer.from('')
-  let contentLength, headerLength
+  let marker, headLength, contentLength
   const request = {}
-  socket.once('data', (chunk) => {
-    console.log('chunked')
-    buffer = Buffer.concat([buffer, chunk])
-    requestHandler(chunk.toString(), request, headerLength)
-    contentLength = request.headers['content-length']
-    console.log(`\n\nrequired length: ${contentLength},${headerLength} \n\n`)
-  })
+
   socket.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk])
     console.log('adding to buffer', chunk.length, buffer.length)
-    setTimeout(() => {
-      if (buffer.length > contentLength) {
-        console.log('sending to parse', buffer.length, buffer.toString().length)
-        requestHandler(buffer.toString(), request)
+
+    const message = buffer.toString()
+
+    if (!request.headers) {
+      marker = message.indexOf('\r\n\r\n')
+      if (marker === -1) {
+        throw Error('Incomplete Headers?')
+      } else {
+        const head = message.slice(0, marker + 4)
+        request.headers = {}
+        headParser(head.slice(0, -4), request)
+        console.log(request)
+
+        headLength = Buffer.from(head).length
+        contentLength = Number(request.headers['content-length'])
+      }
+    } else {
+      console.log('lengths: ', buffer.length - headLength, contentLength)
+
+      if (buffer.length - headLength === contentLength) {
+        const remaining = message.slice(marker + 4)
+        console.log('sending to parse', remaining.length, Buffer.from(remaining).length)
+
+        bodyParser(remaining, request)
+        console.log(request)
+
         const response = generateResponse(request)
-        console.log('\n\nresponding', response.toString())
+        console.log('\n\nresponding', response)
+
         socket.write(response)
         socket.emit('end')
       }
-    }, 2000)
+    }
   })
 
   socket.on('end', () => {
-    console.log('\n\n-----End------', buffer.length)
+    console.log('\n\n-----End------ buffer.length:', buffer.length)
   })
-/*
+  /*
   socket.on('error', e => {
     console.log('!!', e)
     socket.write(generateResponse(request, e.code))
   }) */
 }
 
-function requestHandler (message, request, headerLength) {
-  console.log('message received: ', message.length)
-  let marker
-  if (!request.headers) {
-    console.log('parsing headers')
-    marker = message.indexOf('\r\n\r\n')
-    if (marker === -1) {
-      throw Error('Incomplete Headers?')
-    } else {
-      const head = message.split('\r\n\r\n')[0]
-      headerLength = head.length
-      const [startLine, ...headerLines] = head.split('\r\n')
-      const headers = getHeaders(headerLines)
-      Object.assign(request, {
-        ...parseStartLine(startLine),
-        headers
-      })
-    }
-  } else {
-    const remaining = message.slice(marker)
-    console.log('parsing body', remaining.length)
-    request.body = bodyParser(remaining, request.headers)
-  }
+function headParser (head, request) {
+  console.log('headParser: head.length', head.length)
+  const [startLine, ...headerLines] = head.split('\r\n')
+
+  Object.entries(parseStartLine(startLine)).forEach(([key, value]) => setHeader(request, key, value))
+  headerLines.forEach(line => {
+    const [key, value] = line.split(':')
+    setHeader(request, key.toLowerCase(), value.trim())
+  })
 }
 
-function getHeaders (lines) {
-  const headers = {}
-  lines.forEach(line => {
-    const [key, value] = line.split(':')
-    headers[key.toLowerCase()] = value.trim()
-  })
-  return headers
+function setHeader (request, key, value) {
+  request.headers[key] = value
 }
 
 function parseStartLine (startLine) {
@@ -84,13 +82,12 @@ function parseStartLine (startLine) {
   return { method, path, version }
 }
 
-function bodyParser (data, headers) {
-  console.log('parsing body', data.length)
-  const body = config.contentType.forEach(type => {
-    if (headers['content-type'] === type && config.decoder[type]) {
+function bodyParser (data, request) {
+  console.log('bodyParser: data.length', data.length)
+  request.body = config.contentType.forEach(type => {
+    if (request.headers['content-type'] === type && config.decoder[type]) {
       return config.decoder[type](data)
     }
     return data.toString()
   })
-  return body
 }
