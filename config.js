@@ -14,10 +14,11 @@ module.exports = {
     'application/json': JSON.parse,
     'text/plain': String
   },
-  routes: {
-    GET: {},
-    POST: {},
-    PUT: {},
-    DELETE: {}
-  }
+  /* transferEncodings: [
+    'chunked',
+    'compress',
+    'deflate',
+    'gzip'
+  ], */
+  staticDirectory: 'public'
 }

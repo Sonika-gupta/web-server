@@ -1,11 +1,15 @@
 const net = require('net')
+const { headParser } = require('./requestParser')
+const { addRoute } = require('./routeHandler')
 const config = require('./config')
 const generateResponse = require('./response')
 
-const server = net.createServer(handleConnection)
-server.on('error', (error) => {
-  console.log('Server Error', error)
-}).listen(8000, () => console.log('server listening', server.address()))
+function createServer (port = 8000) {
+  const server = net.createServer(handleConnection)
+  server.on('error', (error) => {
+    console.log('Server Error', error)
+  }).listen(port, () => console.log('server listening', server.address()))
+}
 
 function handleConnection (socket) {
   console.log('-----Connected-----')
@@ -19,22 +23,19 @@ function handleConnection (socket) {
     if (buffer.length === 0) {
       const marker = chunk.indexOf('\r\n\r\n')
       headParser(chunk.slice(0, marker).toString(), request)
+      console.log(request)
+
       contentLength = Number(request.headers['content-length'])
       buffer = Buffer.concat([buffer, chunk.slice(marker + 4)])
+      if (!contentLength || contentLength === buffer.length) {
+        handleRequest(request, socket)
+      }
     } else {
       buffer = Buffer.concat([buffer, chunk])
       console.log('lengths: ', buffer.length, contentLength)
       if (buffer.length === contentLength) {
-        console.log('sending to parse', buffer.length)
-
-        bodyParser(buffer, request)
-        console.log(request)
-
-        const response = generateResponse(request)
-        console.log('\n\nresponding', response)
-
-        socket.write(response)
-        socket.emit('end')
+        request.body = buffer
+        handleRequest(request, socket)
       }
     }
   })
@@ -42,42 +43,27 @@ function handleConnection (socket) {
   socket.on('end', () => {
     console.log('\n\n-----End------ buffer.length:', buffer.length)
   })
-  /*
+
   socket.on('error', e => {
     console.log('!!', e)
     socket.write(generateResponse(request, e.code))
-  }) */
-}
-
-function headParser (head, request) {
-  console.log('headParser: head.length', head.length)
-  request.headers = {}
-
-  const [startLine, ...headerLines] = head.split('\r\n')
-  Object.entries(parseStartLine(startLine)).forEach(([key, value]) => setHeader(request, key, value))
-
-  headerLines.forEach(line => {
-    const [key, value] = line.split(':')
-    setHeader(request, key.toLowerCase(), value.trim())
   })
 }
 
-function setHeader (request, key, value) {
-  request.headers[key] = value
+function handleRequest (request, socket) {
+  console.log('In handleRequest', request)
+  const response = generateResponse(request)
+  console.log('\n\nresponding', response)
+
+  socket.write(response)
+  socket.emit('end')
 }
 
-function parseStartLine (startLine) {
-  const [method, path, scheme] = startLine.trim().split(' ')
-  const version = scheme.split('/')[1]
-  return { method, path, version }
-}
-
-function bodyParser (data, request) {
-  console.log('bodyParser: data.length', data.length)
-  request.body = config.contentType.forEach(type => {
-    if (request.headers['content-type'] === type && config.decoder[type]) {
-      return config.decoder[type](data)
-    }
-    return data.toString()
-  })
+module.exports = {
+  createServer,
+  get: (route, handler) => addRoute('GET', route, handler),
+  post: (route, handler) => addRoute('POST', route, handler),
+  delete: (route, handler) => addRoute('DELETE', route, handler),
+  put: (route, handler) => addRoute('PUT', route, handler),
+  setStatic: (directory) => (config.staticDirectory = directory)
 }
