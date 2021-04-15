@@ -4,8 +4,18 @@ module.exports = {
     200: 'OK',
     400: 'Bad Request',
     404: 'Not Found',
-    500: 'Internal Server Error'
+    408: 'Request Timeout',
+    500: 'Internal Server Error',
+    501: 'Not Implemented',
+    505: 'HTTP Version Not Supported'
   },
+  methods: [
+    'GET',
+    'POST',
+    'PUT',
+    'DELETE',
+    'HEAD'
+  ],
   contentType: [
     'application/json',
     'text/plain'

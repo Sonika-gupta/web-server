@@ -1,12 +1,42 @@
 const config = require('./config')
-const { routes, getRoute } = require('./routeHandler')
+const { getRoute } = require('./routeHandler')
 
-module.exports = function generateResponse ({ headers, body }, statusCode = 200) {
-  console.log('Generating response for', headers)
-  const responseData = methodHandler(headers, body)
+/* function sendResponse (statusCode, responseData, send) {
   const response = [
     generateStatusLine(statusCode),
-    generateResponseHeaders(body ? body.length : 0),
+    generateResponseHeaders(responseData ? responseData.length : 0),
+    generateResponseBody(responseData)
+  ]
+  response.join('\r\n')
+  send(response)
+}
+async function generateResponse ({ headers, body }) {
+  console.log('Generating response for', headers)
+  let responseData, statusCode
+  try {
+    responseData = await methodHandler(headers, body)
+    statusCode = 200
+  } catch (err) {
+    console.log(err)
+    statusCode = 404
+  }
+  return sendResponse(statusCode, responseData)
+} */
+
+module.exports = async function generateResponse ({ headers, body }, statusCode) {
+  let responseData = ''
+  if (!statusCode) {
+    console.log('Generating response for', headers)
+    try {
+      responseData = await methodHandler(headers, body)
+    } catch (err) {
+      console.log(err)
+      statusCode = 404
+    }
+  }
+  const response = [
+    generateStatusLine(statusCode),
+    generateResponseHeaders(responseData.length),
     generateResponseBody(responseData)
   ]
   return response.join('\r\n')
@@ -47,23 +77,17 @@ function methodHandler ({ method, url }, requestBody) {
   return responseBody || {}
 } */
 
-function getContent (path) {
-  return [null, {}]
-}
-
-function methodHandler ({ method, url }, requestBody) {
+async function methodHandler ({ method, path }, requestBody) {
   // routeHandler -> staticFileHandler ?
   // console.log('Routes:', method, routes[method])
+  console.log('methodHandler', { method, path })
+  const [error, content] = await getRoute(method, path, requestBody)
+  console.log('got content', content)
+  // return parseContent(content, body)
 
-  let p
-  try {
-    p = routes[method][url]
-    const content = getRoute(method, url, requestBody)
-    // return parseContent(content, body)
-  } catch (error) {
-    if (error) {
-      throw Error('Method not found')
-    }
+  if (error) {
+    console.log(error.error)
+    throw Error(error.message)
   }
-  return null
+  return content
 }
