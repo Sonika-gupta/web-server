@@ -1,62 +1,94 @@
 const net = require('net')
-const { headParser } = require('./requestParser')
-const { addRoute } = require('./routeHandler')
 const config = require('./config')
-const generateResponse = require('./response')
+
+const { parseStartLine, parseheaders, bodyParser } = require('./requestParsers')
+const { staticFileHandler, routeHandler, notFoundHandler } = require('./handlers')
+const generateResponseMessage = require('./response')
+const routes = config.initRoutes()
 let server
 
-function send (socket, response) {
-  console.log('\n\nresponding', response)
-  socket.write(response)
-  // socket.emit('end')
+const middlewares = [
+  // cookieParser,
+  bodyParser
+]
+const handlers = [
+  ...middlewares,
+  staticFileHandler,
+  routeHandler,
+  notFoundHandler
+]
+
+function addRoute (method, route, handler) {
+  if (typeof handler !== 'function') throw Error('Expected function, got', typeof handler)
+  // check for args
+  routes[method][route] = handler
 }
 
-async function handleRequest (request, socket, resetBuffer) {
-  console.log('In handleRequest', request)
-  send(socket, await generateResponse(request))
-  resetBuffer()
-  return true
+async function processRequest (request, response) {
+  console.log('Request: ', request)
+  let done = false
+  for (const handler of handlers) {
+    done = await handler(request, response)
+    console.log(handler, done)
+    if (done) break
+  }
+  return done
 }
 
 function handleConnection (socket) {
   console.log('-----Connected-----')
   let buffer = Buffer.from('')
   let contentLength
-  const request = {}
+
+  function sendResponse (response) {
+    socket.write(generateResponseMessage(response))
+    socket.emit('end')
+    reset()
+    return true
+  }
+  const request = { sendResponse }
+  const response = { }
+
+  function reset () {
+    buffer = Buffer.from('')
+    for (const prop in request) {
+      delete request[prop]
+    }
+    for (const prop in response) {
+      delete response[prop]
+    }
+  }
 
   socket.on('data', async (chunk) => {
     console.log('adding to buffer', chunk.length, buffer.length)
     // Assuming header is in first chunk
     let done = false
-    function resetBuffer () {
-      buffer = Buffer.from('')
-    }
     try {
       if (buffer.length === 0) {
-        const marker = chunk.indexOf('\r\n\r\n')
-        headParser(chunk.slice(0, marker).toString(), request)
+        const bodyMarker = chunk.indexOf('\r\n\r\n')
+        const head = chunk.slice(0, bodyMarker)
+
+        const headerMarker = chunk.indexOf('\r\n')
+        Object.assign(request, parseStartLine(head.slice(0, headerMarker).toString()))
+        request.headers = parseheaders(head.slice(headerMarker + 2).toString())
+
         contentLength = Number(request.headers['content-length'])
-        buffer = Buffer.concat([buffer, chunk.slice(marker + 4)])
-        if (!contentLength || contentLength === buffer.length) {
-          done = await handleRequest(request, socket, resetBuffer)
-        }
-      } else {
-        buffer = Buffer.concat([buffer, chunk])
-        console.log('lengths: ', buffer.length, contentLength)
-        if (buffer.length === contentLength) {
-          request.body = buffer
-          done = await handleRequest(request, socket, resetBuffer)
-        }
+        chunk = chunk.slice(bodyMarker + 4)
       }
-      setTimeout(async () => {
+      buffer = Buffer.concat([buffer, chunk])
+      console.log('lengths: ', buffer.length, contentLength)
+      if (!contentLength || contentLength === buffer.length) {
+        request.body = buffer
+        done = await processRequest(request, response)
+      }
+      setTimeout(() => {
         if (!done) {
-          send(socket, await generateResponse(request, 408))
-          resetBuffer()
+          reset()
+          const error = new Error({ code: 408 })
+          throw error
         }
       }, 30000)
     } catch (error) {
-      console.log('-------', error)
-      if (!error.code) error.code = 400
       socket.emit('error', error)
     }
   })
@@ -67,7 +99,9 @@ function handleConnection (socket) {
 
   socket.on('error', async (e) => {
     console.log('!!', e)
-    send(socket, await generateResponse(request, e.code || 500))
+    response.statusCode = e.code || 500
+    response.error = true
+    sendResponse(response)
   })
 }
 
@@ -84,10 +118,13 @@ module.exports = {
     server.listen(port, () => console.log('server listening', server.address()))
     return this
   },
-  setStatic (directory) {
+  static (directory) {
     config.staticDirectory = directory
     console.log(config.staticDirectory)
-    return this
+    return staticFileHandler
+  },
+  use (middleware) {
+    middlewares.push(middleware)
   },
   get: (route, handler) => addRoute('GET', route, handler),
   post: (route, handler) => addRoute('POST', route, handler),
