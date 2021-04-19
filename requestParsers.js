@@ -35,6 +35,7 @@ function bodyParser (request, response) {
     request.body = config.parsers[type[0]](request.body)
   } else {
     response.statusCode = 415
+    response.error = true
     request.sendResponse(response)
     return true
   }

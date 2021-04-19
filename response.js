@@ -2,6 +2,7 @@ const config = require('./config')
 
 module.exports = function generateResponseMessage (response) {
   console.log('response', response)
+  if (response.error) return errorResponse(response.statusCode, response.message)
   response.stausLine = generateStatusLine(response.statusCode || 200)
   response.headers = generateResponseHeaders(response)
   // response.body = generateResponseBody(response.responseData)
@@ -10,6 +11,19 @@ module.exports = function generateResponseMessage (response) {
     response.headers,
     response.body || ''
   ].map(line => Buffer.from(line)))
+}
+
+function errorResponse (code, message = '') {
+  const response =
+    `HTTP/1.1 ${code} ${config.status[code]} \r\n` +
+    `Date: ${(new Date()).toUTCString()} \r\n` +
+    'Connection: keep-alive \r\n' +
+    (message
+      ? `Content-Length: ${message.length}\r\n` + 'Content-Type: text/plain\r\n'
+      : '') +
+    '\r\n' +
+    message
+  return response
 }
 /*
 generateErrorResponse: (code, message) => {
@@ -32,12 +46,12 @@ generateErrorResponse: (code, message) => {
 } */
 
 function generateResponseHeaders (response) {
-  const header = []
-  header.push(
+  const header = [
     `Date: ${(new Date()).toUTCString()}`,
     'Connection: keep-alive',
     `Content-Length : ${response.body?.length || 0}`,
-    '\r\n')
+    '\r\n'
+  ]
   if (response.body) {
     header.splice(-1, 0, `Content-Type: ${response.type}`)
   }
@@ -45,5 +59,5 @@ function generateResponseHeaders (response) {
 }
 
 function generateStatusLine (status) {
-  return `HTTP/1.1 ${status} ${config.status[status]} \r\n`
+  return `HTTP/${config.version} ${status} ${config.status[status]} \r\n`
 }

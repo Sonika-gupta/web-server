@@ -6,8 +6,6 @@ const readFile = util.promisify(fs.readFile)
 const config = require('./config')
 const routes = config.initRoutes()
 
-module.exports = { staticFileHandler, routeHandler, notFoundHandler }
-
 async function staticFileHandler (request, response) {
   try {
     // check for relative path
@@ -15,12 +13,14 @@ async function staticFileHandler (request, response) {
     const data = await readFile(resourcePath)
     if (data) {
       response.body = data
-      response.type = contentTypes[resourcePath.split('.').pop().trim()]
+      response.type = contentTypes[resourcePath.split('.').pop()]
+      console.log('type: ', resourcePath.split('.').pop().trim())
       request.sendResponse(response)
       return true
     }
   } catch (err) {
-    console.log(err)
+    response.message = `${request.path} could not be resolved`
+    console.log('File Handler Error', err)
   }
 }
 
@@ -35,6 +35,9 @@ async function routeHandler (request, response) {
 
 function notFoundHandler (request, response) {
   response.statusCode = 404
+  response.error = true
   request.sendResponse(response)
   return true
 }
+
+module.exports = { staticFileHandler, routeHandler, notFoundHandler }

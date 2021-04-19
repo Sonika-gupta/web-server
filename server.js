@@ -84,8 +84,9 @@ function handleConnection (socket) {
       setTimeout(() => {
         if (!done) {
           reset()
-          const error = new Error({ code: 408 })
-          throw error
+          response.statusCode = 408
+          response.error = true
+          sendResponse(generateResponseMessage(response))
         }
       }, 30000)
     } catch (error) {
