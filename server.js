@@ -11,20 +11,20 @@ const middlewares = [
   // cookieParser,
   bodyParser
 ]
-const handlers = [
-  ...middlewares,
-  staticFileHandler,
-  routeHandler,
-  notFoundHandler
-]
 
 function addRoute (method, route, handler) {
   if (typeof handler !== 'function') throw Error('Expected function, got', typeof handler)
   // check for args
-  routes[method][route] = handler
+  if (!routes[method][route]) routes[method][route] = handler
 }
 
 async function processRequest (request, response) {
+  const handlers = [
+    ...middlewares,
+    routeHandler,
+    notFoundHandler
+  ]
+  console.log(handlers)
   console.log('Request: ', request)
   let done = false
   for (const handler of handlers) {
@@ -119,13 +119,10 @@ module.exports = {
     server.listen(port, () => console.log('server listening', server.address()))
     return this
   },
-  static (directory) {
-    config.staticDirectory = directory
-    console.log(config.staticDirectory)
-    return staticFileHandler
-  },
+  static: (directory) => staticFileHandler(directory),
   use (middleware) {
     middlewares.push(middleware)
+    console.log('adding to middlewares', middlewares)
   },
   get: (route, handler) => addRoute('GET', route, handler),
   post: (route, handler) => addRoute('POST', route, handler),

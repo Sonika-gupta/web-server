@@ -41,7 +41,6 @@ module.exports = {
     'deflate',
     'gzip'
   ], */
-  staticDirectory: 'public',
   initRoutes () {
     const routes = {}
     this.methods.forEach(method => (routes[method] = {}))

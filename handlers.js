@@ -1,4 +1,4 @@
-const { staticDirectory, contentTypes } = require('./config')
+const { contentTypes } = require('./config')
 const fs = require('fs')
 const util = require('util')
 const readFile = util.promisify(fs.readFile)
@@ -6,21 +6,23 @@ const readFile = util.promisify(fs.readFile)
 const config = require('./config')
 const routes = config.initRoutes()
 
-async function staticFileHandler (request, response) {
-  try {
+function staticFileHandler (directory) {
+  return async function (request, response) {
+    try {
     // check for relative path
-    const resourcePath = `${staticDirectory}` + request.path + (request.path.endsWith('/') ? 'index.html' : '')
-    const data = await readFile(resourcePath)
-    if (data) {
-      response.body = data
-      response.type = contentTypes[resourcePath.split('.').pop()]
-      console.log('type: ', resourcePath.split('.').pop().trim())
-      request.sendResponse(response)
-      return true
+      const resourcePath = `${directory}` + request.path + (request.path.endsWith('/') ? 'index.html' : '')
+      const data = await readFile(resourcePath)
+      if (data) {
+        response.body = data
+        response.type = contentTypes[resourcePath.split('.').pop()]
+        console.log('type: ', resourcePath.split('.').pop().trim())
+        request.sendResponse(response)
+        return true
+      }
+    } catch (err) {
+      response.message = `CANNOT GET ${request.path}`
+      console.log('File Handler Error', err)
     }
-  } catch (err) {
-    response.message = `${request.path} could not be resolved`
-    console.log('File Handler Error', err)
   }
 }
 
