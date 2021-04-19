@@ -18,8 +18,7 @@ module.exports = {
     'HEAD'
   ],
   parsers: {
-    // check for static function before assigning to other variable/object property
-    'application/json': JSON.parse,
+    'application/json': (...args) => JSON.parse(...args), /* Never assign function of a class directly. It changes 'this' object on effective function. */
     'text/plain': String,
     'mutilpart/form-data': formDataParser
   },
@@ -41,9 +40,15 @@ module.exports = {
     'deflate',
     'gzip'
   ], */
+  routes: {},
+  getRoute (method, route) {
+    return this.routes[method][route]
+  },
+  setRoute (method, route, handler) {
+    if (!this.getRoute(method, route)) this.routes[method][route] = handler
+  },
   initRoutes () {
-    const routes = {}
-    this.methods.forEach(method => (routes[method] = {}))
-    return routes
+    this.methods.forEach(method => (this.routes[method] = {}))
+    return this.routes
   }
 }

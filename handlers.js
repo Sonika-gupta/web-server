@@ -1,21 +1,19 @@
-const { contentTypes } = require('./config')
 const fs = require('fs')
 const util = require('util')
 const readFile = util.promisify(fs.readFile)
 
 const config = require('./config')
-const routes = config.initRoutes()
+config.routes = config.initRoutes()
 
-function staticFileHandler (directory) {
-  return async function (request, response) {
+function serveStatic (directory) {
+  return async function staticFileHandler (request, response) {
     try {
     // check for relative path
       const resourcePath = `${directory}` + request.path + (request.path.endsWith('/') ? 'index.html' : '')
       const data = await readFile(resourcePath)
       if (data) {
         response.body = data
-        response.type = contentTypes[resourcePath.split('.').pop()]
-        console.log('type: ', resourcePath.split('.').pop().trim())
+        response.type = config.contentTypes[resourcePath.split('.').pop()]
         request.sendResponse(response)
         return true
       }
@@ -27,7 +25,7 @@ function staticFileHandler (directory) {
 }
 
 async function routeHandler (request, response) {
-  const handler = routes[request.method][request.path]
+  const handler = config.getRoute(request.method, request.path)
   if (handler) {
     response.responseData = await handler(request, response)
     request.sendResponse(response)
@@ -42,4 +40,4 @@ function notFoundHandler (request, response) {
   return true
 }
 
-module.exports = { staticFileHandler, routeHandler, notFoundHandler }
+module.exports = { serveStatic, routeHandler, notFoundHandler }
